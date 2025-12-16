@@ -1,0 +1,66 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Build mode (debug/profile/release)
+        required: false
+        default: release
+      split_per_abi:
+        description: Split per ABI
+        required: false
+        default: 'false'
+      flavor:
+        description: Optional product flavor
+        required: false
+        default: ''
+  push:
+    branches:
+      - feat/webview-controls
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build APK
+        env:
+          MODE: ${{ github.event.inputs.mode || 'release' }}
+          SPLIT_ABI: ${{ github.event.inputs.split_per_abi || 'false' }}
+          FLAVOR: ${{ github.event.inputs.flavor || '' }}
+        run: |
+          ARGS=(build apk)
+          if [[ "$MODE" == "debug" ]]; then ARGS+=(--debug); fi
+          if [[ "$MODE" == "profile" ]]; then ARGS+=(--profile); fi
+          if [[ "$MODE" == "release" ]]; then ARGS+=(--release); fi
+          if [[ -n "$FLAVOR" ]]; then ARGS+=(--flavor "$FLAVOR"); fi
+          if [[ "$SPLIT_ABI" == "true" ]]; then ARGS+=(--split-per-abi); fi
+          flutter "${ARGS[@]}"
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-apk-${{ github.run_id }}
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
