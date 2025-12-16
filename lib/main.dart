@@ -24,6 +24,195 @@ class AthleteApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
+      home: const PinGate(),
+    );
+  }
+}
+
+// Simple in-memory PIN gate. On first use, requires setting a 4-digit PIN.
+// On subsequent unlocks, requires entering the PIN. Also exposes a way to relock from Home.
+class PinGate extends StatefulWidget {
+  const PinGate({super.key});
+
+  @override
+  State<PinGate> createState() => _PinGateState();
+}
+
+class _PinGateState extends State<PinGate> {
+  String? _pin; // in-memory only
+  bool _unlocked = false;
+
+  void _onSetPin(String pin) {
+    setState(() {
+      _pin = pin;
+      _unlocked = true;
+    });
+  }
+
+  void _onUnlock() {
+    setState(() => _unlocked = true);
+  }
+
+  void _onRelock() {
+    setState(() => _unlocked = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_unlocked) {
+      if (_pin == null) {
+        return PinLockScreen(
+          mode: PinMode.setPin,
+          onPinSet: _onSetPin,
+        );
+      } else {
+        return PinLockScreen(
+          mode: PinMode.unlock,
+          expectedPin: _pin,
+          onUnlocked: _onUnlock,
+        );
+      }
+    }
+    return HomeScreen(onRelock: _onRelock);
+  }
+}
+
+enum PinMode { setPin, unlock }
+
+class PinLockScreen extends StatefulWidget {
+  final PinMode mode;
+  final String? expectedPin; // required for unlock
+  final void Function(String)? onPinSet; // used for setPin mode
+  final VoidCallback? onUnlocked; // used for unlock mode
+
+  const PinLockScreen({
+    super.key,
+    required this.mode,
+    this.expectedPin,
+    this.onPinSet,
+    this.onUnlocked,
+  });
+
+  @override
+  State<PinLockScreen> createState() => _PinLockScreenState();
+}
+
+class _PinLockScreenState extends State<PinLockScreen> {
+  final _pin1 = TextEditingController();
+  final _pin2 = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _pin1.dispose();
+    _pin2.dispose();
+    super.dispose();
+  }
+
+  void _handleSetPin() {
+    final a = _pin1.text.trim();
+    final b = _pin2.text.trim();
+    if (a.length != 4 || int.tryParse(a) == null) {
+      setState(() => _error = 'PIN must be 4 digits');
+      return;
+    }
+    if (a != b) {
+      setState(() => _error = 'PINs do not match');
+      return;
+    }
+    widget.onPinSet?.call(a);
+  }
+
+  void _handleUnlock() {
+    final a = _pin1.text.trim();
+    if (a == widget.expectedPin) {
+      widget.onUnlocked?.call();
+    } else {
+      setState(() => _error = 'Incorrect PIN');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSet = widget.mode == PinMode.setPin;
+    return Scaffold(
+      appBar: AppBar(title: Text(isSet ? 'Set PIN' : 'Unlock')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Card(
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSet) ...[
+                    const Text('Create a 4-digit PIN to protect the app.'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _pin1,
+                      decoration: const InputDecoration(labelText: 'Enter PIN (4 digits)'),
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 4,
+                    ),
+                    TextField(
+                      controller: _pin2,
+                      decoration: const InputDecoration(labelText: 'Confirm PIN'),
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 4,
+                    ),
+                    const SizedBox(height: 8),
+                    if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _handleSetPin,
+                      icon: const Icon(Icons.lock),
+                      label: const Text('Set PIN'),
+                    ),
+                  ] else ...[
+                    const Text('Enter your 4-digit PIN'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _pin1,
+                      decoration: const InputDecoration(labelText: 'PIN'),
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 4,
+                      onSubmitted: (_) => _handleUnlock(),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _handleUnlock,
+                      icon: const Icon(Icons.lock_open),
+                      label: const Text('Unlock'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+  const AthleteApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Athlete Tracker',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
       home: const HomeScreen(),
     );
   }
@@ -46,7 +235,8 @@ class Athlete {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onRelock;
+  const HomeScreen({super.key, this.onRelock});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -103,6 +293,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Athlete Tracker'),
+        actions: [
+          IconButton(
+            tooltip: 'Lock',
+            icon: const Icon(Icons.lock_outline),
+            onPressed: widget.onRelock,
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addAthleteDialog,
