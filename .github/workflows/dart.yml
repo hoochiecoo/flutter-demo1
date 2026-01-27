@@ -1,0 +1,8 @@
+name: Test Runner
+on:
+  workflow_dispatch:   # Можно запускать вручную
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - run: echo "✅ Runner работает!"
